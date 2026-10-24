@@ -1,0 +1,390 @@
+Product Requirements Document
+Market Brief: Multi-Agent Financial Insights
+Version: 1.0Date: 21 October 2026Status: Implementation-ready prototype specificationOwner: RIJUL SEKHAR BARIKApplication source: one Python file, market_agent.py
+1. Executive summary
+Build a read-only financial research API using an Agno Team in coordinate mode, a Groq-backed team leader, and three independently configured specialist agents. The application consolidates recent daily stock performance and company news into a timestamped, evidence-linked market brief.
+This must be a genuine framework-managed multi-agent system. A fixed sequence of prompts or manually invoked agent functions alone does not satisfy the requirement. The team leader delegates to specialists through Agno; Python enforces security, budgets, persistence, and output validation.
+The MVP is an educational/personal research prototype, not a trading platform, investment adviser, or guaranteed real-time data product. Commercial deployment requires appropriate market-data rights and additional operational review.
+2. Problem and target user
+Problem: Individual investors and students repeatedly switch between price charts and news pages to understand recent stock movements. Information can be stale, unsupported, or incorrectly presented as an explanation of causation.
+Primary user: A student or individual conducting informational stock research.
+Core job: Given a supported stock symbol, obtain recent calculated performance, relevant reported developments, source evidence, and visible limitations in one response.
+Value proposition: Consolidated evidence with reproducible calculations, bounded agent autonomy, explicit uncertainty, and transparent execution metadata.
+3. Goals and success criteria
+G1. Produce one coherent market brief from one authenticated request.G2. Demonstrate actual leader delegation to the Market Analyst, News Researcher, and Evidence Reviewer.G3. Compute financial metrics deterministically rather than through LLM arithmetic.G4. Associate material factual claims with evidence identifiers.G5. Return partial or unavailable results honestly when providers fail.G6. Remain lightweight: one application source file, no local GPU, no mandatory MCP server, no vector database.G7. Keep resource consumption bounded and observable.
+Release gates:
+All required fixture tests pass.
+Numeric API fields match deterministic calculations exactly within declared rounding tolerances.
+No invented source identifiers survive validation.
+Every successfully completed full report includes actual participation by all three specialists.
+Concurrent duplicate requests do not launch duplicate analysis runs.
+Provider failures do not leak credentials, stack traces, or fabricated results.
+Completion or bounded failure occurs within the configured overall deadline, subject to explicit cancellation limitations of blocking libraries.
+No claim of production readiness, forecast accuracy, or improved investment returns is part of acceptance.
+4. Scope
+4.1 In scope
+One explicitly supported US-listed stock per request.
+Latest completed daily-session close.
+Five-session and twenty-session price changes.
+Up to five relevant news items within a one-to-seven-day window.
+Evidence-backed developments and qualified interpretations.
+Authentication, validation, caching, idempotency, logging, rate limits, and deadlines.
+JSON API and local FastAPI interactive documentation.
+One model-powered leader and three specialist agents inside one process.
+4.2 Out of scope
+Guaranteed live quotes, tick data, intraday trading, forecasts, and price targets.
+Portfolio optimization, personalized suitability analysis, and buy/sell recommendations.
+Broker credentials, order placement, fund transfers, and other financial writes.
+Arbitrary web crawling, uploaded documents, unrestricted free-text prompts, and user-supplied URLs.
+Separate frontend, microservices, vector retrieval, model training, and MCP infrastructure.
+Indian-market support until symbol mappings, calendars, licensing, and coverage are validated.
+5. Technical choices and rationale
+Layer
+Choice
+Rationale / constraint
+
+Runtime
+Python 3.11+
+Lightweight single-source implementation
+
+Multi-agent framework
+Agno Team, coordinate mode
+Leader-driven delegation and synthesis
+
+Inference
+Groq
+Hosted inference without a GPU
+
+Initial model candidate
+openai/gpt-oss-20b, configurable
+Validate current tool and output capabilities before use
+
+API
+FastAPI + Uvicorn
+Typed endpoints and local interactive testing
+
+Contracts
+Pydantic
+Reject invalid requests and validate responses
+
+Price prototype
+yfinance
+Personal/educational use only; not a commercial data license
+
+News discovery
+ddgs wrapper
+Best-effort bounded discovery, not guaranteed availability
+
+Persistence
+sqlite3
+Cache, request state, idempotency, evidence metadata
+
+Audit
+Python logging
+Structured events with secret redaction
+
+
+Initial dependencies: agno, groq, fastapi, uvicorn, pydantic, yfinance, ddgs.Pin a tested compatible dependency set before release. Verify exact framework APIs, model availability, tool-use behavior, and provider terms during implementation.
+Environment variables:
+GROQ_API_KEY: required provider credential.
+GROQ_MODEL: configurable model identifier.
+APP_API_KEY: application access credential.Optional configuration includes database path, deadlines, rate ceilings, and token budgets.
+No OpenAI API key is required for a Groq-only configuration. No MCP server is required: direct tool wrappers are sufficient for this application. MCP is a connectivity protocol, not an alternative to credentials.
+6. System architecture
+Client -> FastAPI authentication/validation -> SQLite idempotency/cache -> Agno Financial Insights Team -> deterministic final validation -> persisted JSON response.
+Agno Team:
+Model-powered Team Leader.
+Market Analyst Agent.
+News Researcher Agent.
+Evidence Reviewer Agent.
+Delegation sequence:
+Leader requests market evidence and verified company identity.
+Leader delegates news research using that identity.
+Leader forms candidate interpretations and delegates evidence review.
+At most one corrective specialist delegation is permitted.
+Leader synthesizes the final structured brief.
+Application verifies required execution receipts, metrics, evidence links, and output policy.
+The Python boundary is not an additional LLM manager. It owns authentication, allowed actions, budgets, immutable evidence, and validation. Agno owns member delegation and collaborative execution.
+Market calculations and news retrieval may overlap after company identity is known when supported by the tested framework configuration; concurrency is not a release requirement.
+7. Agent specifications
+7.1 Team Leader
+Input: validated symbol, news window, request metadata, team-level constraints.Capability: framework delegation to the three configured members.Excluded tools: direct price search, unrestricted web browsing, shell, broker operations.Output: proposed final brief referencing evidence IDs.Responsibilities: decompose work, assign tasks, request review, resolve one recoverable issue, preserve unresolved warnings, and synthesize.Stop: evidence sufficient, explicit partial/unavailable result, deadline, or exhausted budget.
+7.2 Market Analyst
+Input: supported symbol and analysis time.Tools: get_price_history, compute_metrics.Output: MarketEvidence containing company identity, currency, exchange timezone, latest completed-session close, return metrics, dates, price basis, warnings, and evidence IDs.Permissions: read-only market access and pure calculation.Stop: valid evidence or an explicit data-quality/unavailable result.
+7.3 News Researcher
+Input: company identity, symbol, UTC analysis time, and news window.Tool: search_company_news.Output: NewsEvidence with at most five relevant items and retrieval metadata.Permissions: one restricted search wrapper; no arbitrary page fetches.Responsibilities: filter company mismatches, deduplicate, exclude undated/out-of-window results, and label snippet-level evidence.Stop: sufficient relevant evidence, exhausted permitted search, or structured failure.
+7.4 Evidence Reviewer
+Input: market evidence, news evidence, candidate developments and interpretations.Tool: read-only lookup_evidence(evidence_id).Output: ReviewResult with passed/incomplete/rejected status, claim-level issues, and correction requirements.Permissions: evidence from this request only; no network retrieval or evidence mutation.Responsibilities: check whether claims are supported by collected evidence, flag temporal mismatch and causal overstatement, identify missing data.Limitation: agreement with supplied evidence is not independent verification that a publisher's claim is true.
+8. Agent control and ReAct behavior
+Use a bounded action-observation cycle. Agents inspect missing evidence, select an allowed tool/delegation, observe a structured result, and either continue or stop.
+Do not expose or store private chain-of-thought. Log concise operational decision summaries, tools, parameters with redaction, result types, timings, and termination reasons.
+Mandatory controls:
+Application-enforced tool registry and parameter validation.
+Leader/member call budgets counted across the complete team.
+At least one execution receipt from every required specialist for status=ok.
+Missing mandatory review prevents status=ok.
+No unbounded self-reflection or inter-agent debate.
+At most one corrective delegation.
+No automatic agent creation or dynamic permission expansion.
+Structured output and tool use must be separated when required by the configured Groq model/API. Tool-capable turns gather evidence; a separate supported synthesis request produces schema-constrained JSON. Count that request in the aggregate budget. If the framework/model combination cannot support this separation, reject the configuration rather than silently relying on unsupported behavior.
+9. Tools and deterministic processing
+9.1 get_price_history(symbol)
+Input: allowlisted normalized symbol.Output: verified company metadata, provider metadata, timestamped daily bars, and declared adjustment convention.Fetch roughly three calendar months to obtain sufficient sessions.Validation: sort dates, reject duplicate timestamps, nonfinite values, and nonpositive prices. Never forward-fill missing closes.Return typed errors for timeout, rate limit, unsupported coverage, and malformed data.
+Determine the latest completed session using exchange-local time and reliable session metadata/calendar logic. If completion cannot be established, conservatively exclude the current exchange-local-date bar and emit a warning. Do not claim precise holiday/session awareness without validated calendar support.
+9.2 compute_metrics(history)
+Pure Python calculation; no network and no model arithmetic.N-session change percent = 100 * (P_t / P_(t-N) - 1).Five-session change requires six valid closes; twenty-session change requires twenty-one.Use a consistent adjusted-close basis for returns and declare it. Return the latest quoted close separately if different from the adjusted series.If required adjustment data is unavailable, return null or clearly declare an alternative basis with an explicit warning; do not silently mix conventions.Record actual metric start/end session dates and observation counts.Round only for presentation; preserve full precision internally.
+9.3 search_company_news(symbol, company_name, news_days)
+Construct the search query in server code. Retrieve at most ten candidate results, retain at most five.Output fields: title, publisher, URL, publication timestamp, bounded snippet, retrieval timestamp, source ID.Strip markup, limit content size, deduplicate canonical URLs and normalized titles, and reject irrelevant results.No full-article fetching in the MVP. An unavailable search is not equivalent to no relevant news.
+9.4 lookup_evidence(evidence_id)
+Resolve only IDs registered for the current authenticated run.Return an immutable bounded evidence object; reject unknown or cross-request IDs.
+10. API requirements
+POST /analyze
+Headers:
+X-API-Key: application credential.
+Idempotency-Key: client-generated unique value, length limited and validated.
+Request:{"symbol": "MSFT","news_days": 7}
+Validation:
+Normalize symbol to uppercase and require explicit allowlist membership.
+news_days must be an integer from 1 through 7.
+Reject unknown fields and oversized bodies.
+Do not accept custom prompts, URLs, tool names, or execution options.
+Generate the analysis timestamp on the server in UTC.
+Recommended response behavior:
+200: completed report, including a usable partial report.
+202: an identical idempotent request is already running; return request ID and retry guidance, not a second execution.
+401: missing/invalid access credential.
+409: idempotency key reused with a different canonical body.
+422: invalid request.
+429: application quota/rate limit exceeded.
+503: no usable report because required providers or infrastructure are unavailable.
+504: overall deadline reached with no usable report.
+All error responses include a safe error code, request ID, and concise message. No stack traces.
+GET /health
+Liveness only; no provider calls, credentials, or sensitive configuration.
+GET /docs
+Enabled locally. Protect or disable for public deployment.
+11. Response schema
+Top-level:
+request_id: server-generated identifier.
+status: ok | partial | unavailable.
+symbol, company_name, generated_at.
+market: session date, currency, latest close, five-/twenty-session changes, start/end dates, observation counts, return basis, evidence IDs.
+summary: concise grounded explanation.
+reported_developments: list of claim objects.
+interpretations: list of explicitly qualified claim objects.
+warnings: actionable data limitations.
+sources: evidence registry entries used by the report.
+review: passed | incomplete | rejected, plus issues.
+execution: actual agents invoked, delegations, provider calls, model requests, token usage when available, duration, cache status, and termination reason.
+disclaimer: informational research only; not personalized investment advice.
+Claim object:
+text.
+source_ids.
+evidence_level: calculated | reported | interpretation.
+Source object:
+source_id.
+provider/publisher.
+URL, when applicable.
+published_at, when applicable.
+retrieved_at.
+data_as_of, when applicable.
+evidence granularity, e.g. daily series or search snippet.
+Final numeric fields are attached from Python-owned evidence after model generation. Check numeric prose against evidence or omit unsupported numerical prose. Required fields may be null when unavailable, with an explanatory warning.
+Status policy:
+ok: valid required market metrics, completed news investigation (including genuinely empty relevant results), required specialist participation, and accepted review.
+partial: some usable evidence exists, but a metric, provider, required review, or evidence category is incomplete. Remove rejected claims before delivery.
+unavailable: insufficient trustworthy evidence for a useful report.
+Do not output an uncalibrated confidence percentage.
+12. Security requirements
+Least privilege: each agent receives only its specified tools; leader delegates but has no direct financial write capability.
+Prompt injection: external text is untrusted evidence, never instructions. Bound lengths, separate data from instructions, and enforce permissions outside the model.
+Tool safety: allowlist names and parameters; no eval, shell, arbitrary code execution, unrestricted filesystem writes, or broker tools.
+SSRF prevention: no user-supplied URLs or arbitrary article retrieval; provider destinations fixed by server code.
+Secrets: environment variables only; redact credentials and authorization headers. Never include secrets in prompts or API error bodies.
+Authentication: validate application key before work; use constant-time comparison where practical. A single-key local prototype is not a multi-tenant identity system.
+Evidence integrity: use immutable per-run source registries and validate every source ID. Hashing detects changes but does not establish truth or prevent prompt injection.
+SQL safety: parameterized SQLite queries, atomic transactions, bounded stored fields.
+Access scope: all idempotency and evidence lookups scoped to authenticated principal.
+Financial safety: no personalized trading instructions or execution capability; do not claim that coincident news proved a price movement's cause.
+Data minimization: do not request portfolio holdings or personal financial information.
+Transport: public deployment requires HTTPS and appropriately protected documentation.
+Initial demo limits: ten analyses per hour per principal and at most two concurrent analyses per process, configurable after measurement. In-memory limits are single-process only.
+13. Hashing, idempotency, cache, and persistence
+Use SHA-256 on canonical request JSON and evidence content for fingerprints. A fingerprint is not encryption or authentication.
+Suggested SQLite tables:
+requests(principal_id, idempotency_key, request_hash, request_id, state, lease_expires_at, response_json, http_status, expires_at).
+cache(cache_key, payload_json, created_at, expires_at, evidence_as_of).
+evidence(request_id, source_id, content_hash, metadata_json).
+Idempotency state: in_progress | completed | failed.
+Atomically insert/claim before provider calls using a unique principal/key constraint.
+Same key/body completed: replay the original response, preserving original timestamps.
+Same key/different body: 409.
+Same key/body in progress: 202 and no duplicate run.
+Use expiring leases for abandoned work; define safe recovery before reclaiming.
+Retain completed keys for 24 hours initially.
+Failed requests replay their stored terminal result during the retention period; clients use a new key for an intentional fresh attempt.
+Initial cache TTLs:
+Price evidence: 15 minutes.
+News evidence: 15 minutes.
+Final report: 5 minutes.Include normalized inputs, model identifier, prompt/schema version, and applicable analysis session in cache keys.Cache freshness is not market-data freshness. Preserve original retrieved_at and data_as_of values. Never relabel cached historical data as live.Use a configurable seven-day audit-metadata retention policy for the prototype and remove expired rows periodically without storing full hidden reasoning or secrets.
+14. Reliability and execution budgets
+Initial hard limits per uncached report:
+Four specialist task delegations: three required and one optional correction.
+Three external provider calls, including an optional retry.
+Twelve aggregate model requests across leader and all members, including synthesis/repair calls.
+Five retained news items.
+Sixty-second overall deadline.
+Proposed aggregate ceiling: 24,000 input tokens and 4,000 output tokens, measured across all model calls; adjust only after profiling.
+Count evidence lookup/calculation calls separately from external provider calls. Stop before a call that would exceed a known budget. Bound each individual prompt and output as well as aggregate usage.
+Retry only transient failures and at most once when remaining provider-call and time budgets permit. Do not retry invalid credentials, malformed requests, or exhausted daily quota. Permit at most one structured-output repair, only within all budgets.
+Run blocking libraries outside the asynchronous API event loop. Apply provider/library timeouts. Cancelling an await does not necessarily stop a blocking worker thread; bound worker concurrency and do not assume cancellation guarantees termination of network work.
+On validation failure, remove unsafe claims or return a safe partial/unavailable response. Never bypass numerical/source validation to meet a latency target.
+15. Observability
+Emit structured events for request start/end, cache lookup, idempotency result, delegation, tool start/end, model usage, evidence review, validation, timeout, and budget termination.Fields: request ID, principal pseudonymous ID, agent name, event type, tool name, safe parameter summary, elapsed time, counts, outcome, error class, and short decision summary.Execution metadata must come from actual framework events or supported instrumentation, never model assertions.
+Track completion rate, partial/unavailable rate, latency distribution, provider failures, cache hit rate, token usage, cost estimates, invalid citations, numerical validation failures, and budget terminations.
+16. Single-source construction layout
+market_agent.py sections:
+Imports and environment configuration.
+Constants, allowlist, schemas, budgets.
+SQLite setup, parameterized helpers, cache/idempotency.
+Authentication, rate limiting, and concurrency guard.
+Price/news wrappers and safe error translation.
+Deterministic calculations and evidence registry.
+Three Agno Agent definitions with scoped tools.
+Agno Team with Groq-backed leader and coordinate mode.
+Budget-aware execution and instrumentation.
+Deterministic final validation.
+FastAPI endpoints and exception handlers.
+Embedded deterministic fixture tests / self-test entry point.
+Application entry point.
+Runtime SQLite/log files and installed dependencies are allowed; all authored application logic remains in one source file. A pinned dependency manifest may accompany deployment without changing the single-source architecture.
+Local launch: uvicorn market_agent:app --host 127.0.0.1 --port 8000.Start with one worker. Multiple workers require shared rate limits and coordinated resource controls.
+17. Cost strategy
+Run locally, use one configured Groq model for all roles, cache provider results, send concise evidence packages instead of full histories, and cap daily analyses. No GPU or paid MCP service is required.
+Estimated inference cost = (input_tokens * input_price_per_million + output_tokens * output_price_per_million) / 1,000,000.Use current provider prices and observed usage; do not promise zero cost or a fixed cost per report without measurement. Count leader orchestration, members, repairs, and final synthesis.
+Search availability, rate limits, model availability, and financial-data licensing remain external dependencies. Alpha Vantage may be evaluated as an alternative, but its documented standard allowance and premium adjusted-data restrictions must be checked before adoption.
+18. Acceptance and test matrix
+ID
+Scenario
+Expected result
+
+A01
+Six known closes
+Five-session change matches formula
+
+A02
+Fewer than 21 closes
+Twenty-session metric null plus warning
+
+A03
+Split-adjusted fixture
+Consistent declared return convention
+
+A04
+Unfinished current session
+Current incomplete bar excluded
+
+A05
+Duplicate/invalid prices
+Rejected or explicit unusable series
+
+A06
+Invalid symbol/unknown fields
+Rejected before paid/provider calls
+
+A07
+Irrelevant/undated news
+Excluded from recent evidence
+
+A08
+Search outage
+news_unavailable, not no-news claim
+
+A09
+Injection in snippet
+No permission/instruction changes
+
+A10
+Invented source ID
+Draft rejected by deterministic validator
+
+A11
+Model alters price
+Numeric API value remains Python-owned; invalid prose removed/rejected
+
+A12
+Concurrent duplicate key/body
+One execution, others receive in-progress/replayed result
+
+A13
+Same key/different body
+409 conflict
+
+A14
+Provider timeout/quota
+Bounded safe partial/unavailable result
+
+A15
+Missing reviewer delegation
+Cannot return status=ok
+
+A16
+Budget exhaustion
+No additional call; explicit termination reason
+
+A17
+Unsupported causal assertion
+Flagged and removed or qualified
+
+A18
+Unauthorized evidence lookup
+Rejected across request/principal boundary
+
+A19
+Expired cache
+Refresh attempted; timestamps never silently updated
+
+A20
+Tool + output compatibility
+Tested model/framework path gathers tools then generates validated JSON
+
+A21
+Public auth/rate limit
+Unauthorized work rejected; excess usage throttled
+
+A22
+Agent execution metadata
+Matches actual framework event records
+
+
+Use deterministic local fixtures and mocked tool/model results for core tests. Run limited live-provider smoke tests separately. Add a golden set of representative requests and failures before changing prompts, models, or framework versions.
+19. Implementation milestones
+M1. Schemas, environment validation, FastAPI, authentication: 45 minutes.M2. Price wrapper, completed-session handling, metric fixtures: 60 minutes.M3. News wrapper and evidence registry: 45 minutes.M4. Three agents, coordinating Team, review delegation, synthesis: 75 minutes.M5. SQLite cache/idempotency, instrumentation, errors/budgets: 60 minutes.M6. Security fixtures and live smoke demo: 60 minutes.
+Estimate: approximately six hours for a prototype when provider/framework integration behaves as expected. This is an estimate, not a delivery guarantee. Calendar validation, framework compatibility debugging, commercial licensing, and production hardening may take longer.
+20. Risks and mitigations
+Framework/API drift: pin a tested environment; verify examples against installed versions.
+Tool/output incompatibility: separate tool execution and schema-constrained generation.
+Unreliable free discovery: visible partial responses and replaceable provider wrapper.
+Data licensing: restrict prototype use and obtain a suitable license before public/commercial redistribution.
+False causal explanations: claim-level review and explicit interpretation labels.
+Leader skips member: require execution receipts before status=ok.
+Reviewer hallucination: deterministic checks remain authoritative for numbers, IDs, and permissions.
+Unbounded nested calls: application-level counters and deadlines across all agents.
+Single-process scaling: limit demo concurrency; defer shared infrastructure until required.
+21. Definition of done
+One application source file runs locally. An authenticated request enters an actual Agno coordinating team; all three specialists participate in a successful full analysis; deterministic price calculations and bounded news evidence are reviewed; the leader returns a structured brief; Python validates evidence and numbers; persistence prevents duplicate work; and failures remain explicit and safe.
+No successful demo depends on fabricated prices, invented citations, unrestricted browsing, hidden financial execution, or claims of guaranteed real-time intelligence.
+22. Source basis and implementation verification
+The architecture follows the source material reviewed in the planning conversation. These references support framework/provider/security choices; they do not replace version-specific implementation testing.
+Agno team overview and coordinate mode: https://docs.agno.com/teams/overview
+Agno team construction: https://docs.agno.com/teams/building-teams
+Specialized team tools: https://docs.agno.com/examples/teams/modes/coordinate/with-tools
+Coordinate example: https://docs.agno.com/examples/teams/modes/coordinate/basic
+Phidata transition notice: https://docs.phidata.com/introduction
+Original project tutorial: https://www.projectpro.io/article/phidata-ai-agents/1090
+Groq structured outputs: https://console.groq.com/docs/structured-outputs
+OWASP agent security: https://cheatsheetseries.owasp.org/cheatsheets/AI_Agent_Security_Cheat_Sheet.html
+OWASP prompt-injection prevention: https://cheatsheetseries.owasp.org/cheatsheets/LLM_Prompt_Injection_Prevention_Cheat_Sheet.html
+Prototype price-data legal note: https://aroussi.com/post/python-yahoo-finance.
+Alpha Vantage support: https://www.alphavantage.co/support/api-key/
+Alpha Vantage API documentation: https://www.alphavantage.co/documentation/
